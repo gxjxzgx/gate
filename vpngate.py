@@ -460,26 +460,26 @@ EDGE_HOSTS = [
     h.strip()
     for h in os.environ.get(
         "EDGE_HOSTS",
-        "www.gov.il:2053,53.fs1.hubspotusercontent-na1.net:8443,linear.app:2087,",
-        "www.dbs.com.sg:2096,www.carousell.sg:443,guide.for.edu.sg:2053,",
-        "www.udacity.com:2053,www.zendesk.com:2083,store.ubi.com:2096,",
-        "staticdelivery.nexusmods.com:2053,www.broadcom.com:2083,",
-        "kickstarter.com:2083,egov.uscis.gov:2053,www.sage.com:2053,",
-        "login.rockwellautomation.com:2087,securecircle.com:2083,www.vmware.com:2083,",
-        "ahrefs.com:2087,www.jp.pima.gov:2053,cdn.204910.best:8443,www.deepl.com:443,",
-        "prizepicks.com:2087,stores.staples.com:2096,mfa.gov.ua:2083,",
-        "www.shopify.com:2087,www.mfyx.cn:2096,openai.com:2087,",
-        "www.wuduanyun.com:8443,www.galgamex.net:2083,funko.com:2087,uspto.gov:8443,",
-        "cf.3666888.xyz:8443,serviceshub.samsclub.com:2053,www.blibli.com:2096,",
-        "bbs.alipansou.com:8443,vps.cheng2001.top:2083,spring.io:8443,",
-        "fn.130519.xyz:8443,www.sofi.com:8443,p.etime.vip:443,cdn.jwcmdr.top:8443,",
-        "cf.xreak.top:2087,cf.itv888.cn:2096,saas.072159.xyz:2083,",
-        "www.mastervolt.com:8443,api.gzcrtw.com:2083,cf.nyanya.moe:2087,",
-        "www.wto.org:443,cf.877774.xyz:8443,cf.1o.ee:2096,cdn.7zz.cn:443,",
-        "cf-cname.xingpingcn.top:8443,dianomi.com:2083,www.bis.gov:443,eii.at:2096,",
-        "constitution.congress.gov:2096,cf.468123.xyz:2053,224322.xyz:2083,",
-        "m.iyf.tv:443,ikankeji.com:8443,cnllm.com:2053,cloudflare.idc.rocks:2096,",
-        "wppaunz.com:2053",
+        "www.gov.il:2053,53.fs1.hubspotusercontent-na1.net:8443,linear.app:2087,"
+        "www.dbs.com.sg:2096,www.carousell.sg:443,guide.for.edu.sg:2053,"
+        "www.udacity.com:2053,www.zendesk.com:2083,store.ubi.com:2096,"
+        "staticdelivery.nexusmods.com:2053,www.broadcom.com:2083,"
+        "kickstarter.com:2083,egov.uscis.gov:2053,www.sage.com:2053,"
+        "login.rockwellautomation.com:2087,securecircle.com:2083,www.vmware.com:2083,"
+        "ahrefs.com:2087,www.jp.pima.gov:2053,cdn.204910.best:8443,www.deepl.com:443,"
+        "prizepicks.com:2087,stores.staples.com:2096,mfa.gov.ua:2083,"
+        "www.shopify.com:2087,www.mfyx.cn:2096,openai.com:2087,"
+        "www.wuduanyun.com:8443,www.galgamex.net:2083,funko.com:2087,uspto.gov:8443,"
+        "cf.3666888.xyz:8443,serviceshub.samsclub.com:2053,www.blibli.com:2096,"
+        "bbs.alipansou.com:8443,vps.cheng2001.top:2083,spring.io:8443,"
+        "fn.130519.xyz:8443,www.sofi.com:8443,p.etime.vip:443,cdn.jwcmdr.top:8443,"
+        "cf.xreak.top:2087,cf.itv888.cn:2096,saas.072159.xyz:2083,"
+        "www.mastervolt.com:8443,api.gzcrtw.com:2083,cf.nyanya.moe:2087,"
+        "www.wto.org:443,cf.877774.xyz:8443,cf.1o.ee:2096,cdn.7zz.cn:443,"
+        "cf-cname.xingpingcn.top:8443,dianomi.com:2083,www.bis.gov:443,eii.at:2096,"
+        "constitution.congress.gov:2096,cf.468123.xyz:2053,224322.xyz:2083,"
+        "m.iyf.tv:443,ikankeji.com:8443,cnllm.com:2053,cloudflare.idc.rocks:2096,"
+        "wppaunz.com:2053"
     ).split(",")
     if h.strip()
 ]
