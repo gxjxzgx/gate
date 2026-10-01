@@ -10,7 +10,7 @@ VPN Gate SSTP 节点检测流水线
   4. 并发调用已部署的 Cloudflare Worker: GET {WORKER}/check?proxyip=host:port
      (单节点 HTTP 成功 != 节点可用; 以 Worker 返回 JSON 的 success 字段为准)
   5. 保留 success=true 的节点, 按国家分组, 生成 public/ 下的
-     data.json / index.html / chains.txt / hosts.txt / sub.txt / clash.yaml
+     data.json / index.html / chains.txt / hosts.txt / sub / clash
   6. 网页端 (GitHub Pages) 读取 data.json 展示
 
 退出码:
@@ -553,7 +553,7 @@ def build_hosts_text(data):
 EDT_UUID = os.environ.get("EDT_UUID", "b0437161-402e-483d-8462-65215b245b07")
 EDT_DOMAIN = os.environ.get("EDT_DOMAIN", "xxw.zx10.eu.cc")
 EDT_FINGERPRINT = os.environ.get("EDT_FINGERPRINT", "chrome")
-SUB_URL = os.environ.get("SUB_URL", "https://gxjxzgx.github.io/gate/sub.txt")
+SUB_URL = os.environ.get("SUB_URL", "https://gxjxzgx.github.io/gate/sub")
 
 
 def _b64_secret_encode(plaintext, secret):
@@ -712,12 +712,12 @@ def write_outputs(data):
         f.write(build_hosts_text(data))
 
     # 完整 vless:// 订阅 (填进后台「订阅链接」URL, 客户端自动轮换)
-    sub_path = os.path.join(PUBLIC_DIR, "sub.txt")
+    sub_path = os.path.join(PUBLIC_DIR, "sub")
     with open(sub_path, "w", encoding="utf-8") as f:
         f.write(build_sub_text(data))
 
     # Clash / Mihomo / FlClash 可直接导入的完整配置
-    clash_path = os.path.join(PUBLIC_DIR, "clash.yaml")
+    clash_path = os.path.join(PUBLIC_DIR, "clash")
     with open(clash_path, "w", encoding="utf-8") as f:
         f.write(build_clash_text(data))
 
