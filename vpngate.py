@@ -510,13 +510,50 @@ EDGE_HOSTS = [
 
 HOSTS_URL = os.environ.get("HOSTS_URL", "https://gxjxzgx.github.io/gate/hosts.txt")
 
+# 远程优选池 (openvp 仓库每周自动刷新: 官方 IP 段采样 + TLS 握手测速)
+# 可通过环境变量 POOL_URL 覆盖; 拉取失败时静默回退到内置 EDGE_HOSTS
+POOL_URL = os.environ.get(
+    "POOL_URL",
+    "https://raw.githubusercontent.com/gxjxzgx/openvp/main/edge_pool.txt",
+)
+
+
+def load_edge_hosts():
+    """优选入口地址池, 按优先级:
+    1) HOSTS_ENTRY 环境变量 (逗号分隔, 手动覆盖);
+    2) POOL_URL 远程池子 (openvp 仓库每周自动刷新);
+    3) 内置 EDGE_HOSTS;
+    4) 兜底 EDT_DOMAIN:443。
+    远程拉取失败时静默回退, 不中断主流程。"""
+    _entry = os.environ.get("HOSTS_ENTRY", "").strip()
+    if _entry:
+        return [e.strip() for e in _entry.split(",") if e.strip()]
+    if POOL_URL:
+        try:
+            r = requests.get(POOL_URL, timeout=20, headers={"User-Agent": "gate-checker"})
+            if r.status_code == 200:
+                pool = [
+                    ln.strip() for ln in r.text.splitlines()
+                    if ln.strip() and not ln.strip().startswith("#") and ":" in ln
+                ]
+                if pool:
+                    log("EDGE POOL", f"远程池子拉取成功: {len(pool)} 个入口")
+                    return pool
+                log("EDGE POOL", "远程池子为空, 回退内置")
+            else:
+                log("EDGE POOL", f"远程池子 HTTP {r.status_code}, 回退内置")
+        except Exception as exc:
+            log("EDGE POOL", f"远程池子拉取失败 ({exc}), 回退内置")
+    if EDGE_HOSTS:
+        return EDGE_HOSTS
+    return [f"{EDT_DOMAIN}:443"]
+
 
 def build_hosts_text(data):
     """生成可直接粘贴到 edgetunnel 后台「自定义优选IP」框的清单。
     每行 = 入口地址#名字$sstp://... ; 名字固定, 底下 SSTP 节点每 30 分钟自动换。"""
-    # 入口: 默认循环使用 EDGE_HOSTS; 可用 HOSTS_ENTRY 覆盖(逗号分隔)
-    _entry = os.environ.get("HOSTS_ENTRY", "").strip()
-    edge = [e.strip() for e in _entry.split(",") if e.strip()] or EDGE_HOSTS or [f"{EDT_DOMAIN}:443"]
+    # 入口: load_edge_hosts() 按优先级取 (手动覆盖 > 远程池子 > 内置 > 兜底)
+    edge = load_edge_hosts()
 
     lines = [
         "# edgetunnel「自定义优选IP」清单 (整段复制, 追加到后台现有内容后面)",
