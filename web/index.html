@@ -72,7 +72,7 @@ function copyLink(text) {
 function renderCards(d) {
   const s = d.stats || {};
   const items = [
-    ["最后更新", d.generated_at || "-", "时区 UTC"],
+    ["最后更新", d.generated_at || "-", "北京时间 (UTC+8)"],
     ["SSTP 节点", s.sstp_nodes, "筛选自 VPN Gate"],
     ["已检测", s.checked, "提交给 Worker"],
     ["可用节点", s.success, "success = true"],
