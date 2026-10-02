@@ -25,8 +25,10 @@ import io
 import json
 import os
 import re
+import socket
 import sys
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
@@ -764,6 +766,104 @@ def write_outputs(data):
 
 
 # ---------------------------------------------------------------------------
+# OpenVPN 节点提取 (与 SSTP 流水线独立: 提取 -> TCP 存活检查 -> 打包发布)
+# ---------------------------------------------------------------------------
+OVPN_ENABLE = os.environ.get("OVPN_ENABLE", "1") == "1"
+OVPN_CHECK_TIMEOUT = float(os.environ.get("OVPN_CHECK_TIMEOUT", "5"))
+OVPN_WORKERS = int(os.environ.get("OVPN_WORKERS", "32"))
+OVPN_MAX = int(os.environ.get("OVPN_MAX", "0"))
+
+_REMOTE_RE = re.compile(r"^remote\s+(\S+)\s+(\d+)", re.M)
+_PROTO_RE = re.compile(r"^proto\s+(\S+)", re.M)
+
+
+def extract_ovpn_nodes(rows):
+    """从 VPN Gate 原始行解码 OpenVPN 配置, 提取 remote 地址/端口/协议。
+    返回 [{country_long, country_short, host, ip, remote_host, remote_port, proto, config}]。"""
+    nodes, seen = [], set()
+    for r in rows:
+        b64 = (r.get("config_b64") or "").strip()
+        if not b64:
+            continue
+        try:
+            cfg = base64.b64decode(b64, validate=False).decode("utf-8", "replace")
+        except Exception:
+            continue
+        m = _REMOTE_RE.search(cfg)
+        if not m:
+            continue
+        rh, rp = m.group(1), int(m.group(2))
+        pm = _PROTO_RE.search(cfg)
+        proto = pm.group(1).lower() if pm else "udp"
+        key = (rh.lower(), rp, proto)
+        if key in seen:
+            continue
+        seen.add(key)
+        nodes.append({
+            "country_long": r.get("country_long", ""),
+            "country_short": r.get("country_short", ""),
+            "host": r.get("host", ""),
+            "ip": r.get("ip", ""),
+            "remote_host": rh,
+            "remote_port": rp,
+            "proto": proto,
+            "config": cfg,
+        })
+    return nodes
+
+
+def _ovpn_tcp_ok(node, timeout):
+    try:
+        with socket.create_connection((node["remote_host"], node["remote_port"]), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def check_ovpn_nodes(nodes):
+    """并发 TCP 连通性检查, 只保留端口可达的节点 (按国家排序)。"""
+    alive = []
+    with ThreadPoolExecutor(max_workers=OVPN_WORKERS) as pool:
+        futs = {pool.submit(_ovpn_tcp_ok, n, OVPN_CHECK_TIMEOUT): n for n in nodes}
+        for fut in as_completed(futs):
+            if fut.result():
+                alive.append(futs[fut])
+    alive.sort(key=lambda n: (n["country_short"], n["remote_host"], n["remote_port"]))
+    if OVPN_MAX > 0:
+        alive = alive[:OVPN_MAX]
+    return alive
+
+
+def write_ovpn_outputs(nodes):
+    """发布 openvpn.zip (全部 .ovpn) + openvpn.txt (索引清单) 到 PUBLIC_DIR。"""
+    os.makedirs(PUBLIC_DIR, exist_ok=True)
+    now = datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M")
+    counters = {}
+    index_lines = [
+        "# VPN Gate OpenVPN 节点 (自动刷新, 每 30 分钟重新提取)",
+        f"# 更新时间: {now} (北京时间)",
+        f"# 共 {len(nodes)} 个 (已做 TCP 端口可达检查)",
+        "# 文件名 | 国家 | 连接地址:端口 (协议)",
+        "# 下载 openvpn.zip 解压, 导入客户端即用",
+    ]
+    zip_path = os.path.join(PUBLIC_DIR, "openvpn.zip")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n in nodes:
+            cs = re.sub(r"\W+", "", n["country_short"]) or "XX"
+            counters[cs] = counters.get(cs, 0) + 1
+            fname = f"{cs}-{counters[cs]:02d}.ovpn"
+            zf.writestr(fname, n["config"])
+            index_lines.append(
+                f"{fname} | {n['country_long']} | "
+                f"{n['remote_host']}:{n['remote_port']} ({n['proto']})"
+            )
+    txt_path = os.path.join(PUBLIC_DIR, "openvpn.txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(index_lines) + "\n")
+    return (zip_path, txt_path)
+
+
+# ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 def main():
@@ -812,6 +912,18 @@ def main():
     for p in paths:
         log("WEBSITE", f"生成 {os.path.relpath(p, REPO_DIR)}")
     log("WEBSITE", "完成 (GitHub Pages 部署由 workflow 执行)")
+
+    # 5) OpenVPN 节点提取 + 发布 (与 SSTP 独立, 失败不影响主流程)
+    if OVPN_ENABLE:
+        try:
+            ovpn_nodes = extract_ovpn_nodes(rows)
+            log("OPENVPN", f"提取到 {len(ovpn_nodes)} 个 OpenVPN 节点")
+            alive = check_ovpn_nodes(ovpn_nodes)
+            log("OPENVPN", f"TCP 可达: {len(alive)}/{len(ovpn_nodes)}")
+            for p in write_ovpn_outputs(alive):
+                log("WEBSITE", f"生成 {os.path.relpath(p, REPO_DIR)}")
+        except Exception as exc:
+            log("OPENVPN", f"提取失败 ({exc}), 跳过 (不影响 SSTP 主流程)")
 
 
 if __name__ == "__main__":
