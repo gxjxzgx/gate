@@ -324,7 +324,7 @@ def check_one(node, session):
     out["protocol"] = "sstp"
     out["link"] = f"sstp://vpn:vpn@{node['host']}:{node['port']}"
     out["status"] = "failed"
-    out["checked_at"] = datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M CST")
+    out["checked_at"] = datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M")
     out["exit"] = None
     out["residential"] = "unknown"
     try:
@@ -407,7 +407,7 @@ def build_outputs(results, raw_count, sstp_count, source):
         by_country[name] = grp
 
     data = {
-        "generated_at": datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M:%S CST"),
+        "generated_at": datetime.now(BEIJING).strftime("%Y-%m-%d %H:%M:%S"),
         "source": source,
         "worker": WORKER_CHECK_URL,
         "stats": stats,
@@ -466,9 +466,9 @@ def build_chains_text(data):
         res_nodes = [n for n in nodes if n.get("residential") == "residential"]
         dc_nodes = [n for n in nodes if n.get("residential") != "residential"]
         for i, n in enumerate(res_nodes, 1):
-            lines.append(f"{zh}-住宅-{i:02d}$sstp://vpn:vpn@{n['host']}:{n['port']}")
+            lines.append(f"{zh}-住宅-{i:02d}-sstp$sstp://vpn:vpn@{n['host']}:{n['port']}")
         for i, n in enumerate(dc_nodes, 1):
-            lines.append(f"{zh}-机房-{i:02d}$sstp://vpn:vpn@{n['host']}:{n['port']}")
+            lines.append(f"{zh}-机房-{i:02d}-sstp$sstp://vpn:vpn@{n['host']}:{n['port']}")
     return "\n".join(lines) + "\n"
 
 
@@ -543,11 +543,11 @@ def build_hosts_text(data):
         for i, n in enumerate(res_nodes, 1):
             entry = edge[idx % len(edge)]
             idx += 1
-            lines.append(f"{entry}#{zh}-住宅-{i:02d}$sstp://vpn:vpn@{n['host']}:{n['port']}")
+            lines.append(f"{entry}#{zh}-住宅-{i:02d}-sstp$sstp://vpn:vpn@{n['host']}:{n['port']}")
         for i, n in enumerate(dc_nodes, 1):
             entry = edge[idx % len(edge)]
             idx += 1
-            lines.append(f"{entry}#{zh}-机房-{i:02d}$sstp://vpn:vpn@{n['host']}:{n['port']}")
+            lines.append(f"{entry}#{zh}-机房-{i:02d}-sstp$sstp://vpn:vpn@{n['host']}:{n['port']}")
     return "\n".join(lines) + "\n"
 
 
@@ -613,7 +613,7 @@ def build_sub_text(data):
         code = str(grp.get("code") or "?").upper()
         zh = COUNTRY_ZH.get(code) or (code if code and code != "?" else cname)
         for i, n in enumerate(_sorted_nodes(grp), 1):
-            name = f"{zh}-{i:02d}"
+            name = f"{zh}-{i:02d}-sstp"
             path = quote(_chain_path(n), safe="")
             link = (
                 f"vless://{EDT_UUID}@{EDT_DOMAIN}:443?security=tls&type=ws"
@@ -634,10 +634,10 @@ def build_clash_text(data):
         code = str(grp.get("code") or "?").upper()
         zh = COUNTRY_ZH.get(code) or (code if code and code != "?" else cname)
         for i, n in enumerate(_sorted_nodes(grp), 1):
-            name = f"{zh}-{i:02d}"
+            name = f"{zh}-{i:02d}-sstp"
             k = 2
             while name in used:  # 不同国家码映射到同一中文名时避免重名
-                name = f"{zh}-{i:02d}-{k}"
+                name = f"{zh}-{i:02d}-{k}-sstp"
                 k += 1
             used.add(name)
             names.append(name)
