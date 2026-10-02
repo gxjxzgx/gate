@@ -773,8 +773,8 @@ OVPN_CHECK_TIMEOUT = float(os.environ.get("OVPN_CHECK_TIMEOUT", "5"))
 OVPN_WORKERS = int(os.environ.get("OVPN_WORKERS", "32"))
 OVPN_MAX = int(os.environ.get("OVPN_MAX", "0"))
 
-_REMOTE_RE = re.compile(r"^remote\s+(\S+)\s+(\d+)", re.M)
-_PROTO_RE = re.compile(r"^proto\s+(\S+)", re.M)
+_OVPN_REMOTE_RE = re.compile(r"^remote\s+(\S+)\s+(\d+)", re.M)
+_OVPN_PROTO_RE = re.compile(r"^proto\s+(\S+)", re.M)
 
 
 def extract_ovpn_nodes(rows):
@@ -789,11 +789,11 @@ def extract_ovpn_nodes(rows):
             cfg = base64.b64decode(b64, validate=False).decode("utf-8", "replace")
         except Exception:
             continue
-        m = _REMOTE_RE.search(cfg)
+        m = _OVPN_REMOTE_RE.search(cfg)
         if not m:
             continue
         rh, rp = m.group(1), int(m.group(2))
-        pm = _PROTO_RE.search(cfg)
+        pm = _OVPN_PROTO_RE.search(cfg)
         proto = pm.group(1).lower() if pm else "udp"
         key = (rh.lower(), rp, proto)
         if key in seen:
