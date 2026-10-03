@@ -603,6 +603,8 @@ def build_sub_text(data):
         "# VPN Gate SSTP 节点自动检测 (每 30 分钟拉取并检测)",
         f"# 自动更新: {data['generated_at']}",
         "# 延迟过高时, 请改用链式代理节点",
+        "# ISP 节点说明: 节点多为志愿者家庭宽带 (ISP 住宅 IP), 出口为当地运营商地址; 少数为机房 IP",
+        "# ISP 节点由志愿者提供, 稳定性与速度波动较大, 随时可能下线",
         f"# 节点域名: {EDT_DOMAIN} (传输 ws / TLS / fingerprint {EDT_FINGERPRINT})",
         "# 名字固定; $sstp:// 链式代理(编码在 path)每 30 分钟自动更换",
         "# 账号密码固定 vpn:vpn ; 节点端口已编码进 path",
