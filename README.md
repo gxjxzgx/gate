@@ -2,7 +2,7 @@
 
 VPN Gate OpenVPN 节点自动刷新流水线: 每小时拉取 VPN Gate 数据, 提取 OpenVPN 配置并做 TCP 存活检查,
 发布到 GitHub Pages 监控页, Clash 订阅上传到私有 Cloudflare Worker。
-`ovpn.py` 与工作流 `ovpn.yml` 同名, 共用 `common.py` (日志、环境变量、HTTP、VPN Gate 解析、原子写文件),
+`ovpn.py` 与工作流 `ovpn.yml` 同名, 共用 `common.py` (日志、环境变量、HTTP、VPN Gate 解析、节点命名、原子写文件),
 **只用 Python 标准库, 无需安装依赖**。
 
 | 工作流 | 脚本 | 频率 | 输出 |
@@ -10,11 +10,23 @@ VPN Gate OpenVPN 节点自动刷新流水线: 每小时拉取 VPN Gate 数据, �
 | `ovpn.yml` | `ovpn.py` | 每小时 | `ovpn.json`(Pages, 含全部节点); `ovpn.yaml`(Clash, 私有 Worker; 住宅节点 > 20 个时不含机房节点) |
 
 数据文件只在工作流运行时生成并发布, 不提交到仓库。
+每次运行结束清理旧的运行记录, 只保留最新 3 条。
+
+## 节点命名
+
+所有输出文件使用同一条规则: **`地区-类型-序号-协议`**, 例: `日本-住宅-01-ovpn` `日本-机房-01-ovpn`。
+
+- 类型只有三种: 住宅 / 机房 / 未识别 (按 VPN Gate 主机名前缀估算, 仅供参考)。
+- 地区用中文国名 (对照表见 `common.py` 的 `COUNTRY_ZH`, 未收录的显示国家码); 国家码不同但中文名相同的
+  (如 GB 与 UK 都是"英国") 合并后连续编号, 不会重名。
+- 序号在「同一地区 + 同一类型」内从 01 开始, 按住宅 → 机房 → 未识别排列, 同类内延迟从低到高。
+- 修改规则只需改 `common.py` 的 `node_name()` 和 `TYPE_LABEL`。
+- 节点名里不使用 emoji / 图标。
 
 ## 目录
 
 ```
-common.py              共用工具 (含 PUBLIC_FILES / PRIVATE_FILES 文件清单, 单一来源)
+common.py              共用工具
 ovpn.py                OpenVPN 节点提取 + TCP 存活检查
 tools/prepare_site.sh  从线上取回旧数据文件 (取回后会校验内容)
 tools/upload_private.sh  把私有订阅上传到 Worker, 并确保不留在站点目录
@@ -32,7 +44,7 @@ worker/                私有订阅托管 Worker
 
 1. Settings → Actions → General → Workflow permissions 选 **Read and write permissions**。
 2. 在 GitHub 网页上手动创建 `.github/workflows/ovpn.yml` (API 推不了 workflows 文件)。
-3. Actions 页手动运行 `OVPN Check` 一次。
+3. Actions 页手动运行 `OpenVPN Refresh` 一次。
 
 ## 环境变量
 
