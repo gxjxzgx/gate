@@ -20,7 +20,7 @@ ovpn.py —— VPN Gate OpenVPN 节点提取 + TCP 存活检查 (工作流: ovpn
   KEEP_UDP            UDP 节点: 1=不检查直接保留, 0=丢弃 (默认 1; 工作流里设为 0)
   MAX_YAML            ovpn.yaml 最多保留 N 个, 0=全部 (按延迟优先截断; 网页仍显示全部)
   EXCLUDE_DC / MIN_ISP  机房节点排除开关 (默认 1) / 住宅数量阈值 (默认 20)
-  INCLUDE_COUNTRIES   国家白名单, 逗号分隔的国家码 (如 JP,KR), 只影响订阅, 为空=不过滤
+  INCLUDE_COUNTRIES   国家白名单, 逗号分隔的国家码 (如 JP,KR), 同时作用于订阅和网页, 为空=不过滤
   OUT_DIR             输出目录
   VPNGATE_API / VPNGATE_MIRROR   数据源地址
 """
@@ -44,7 +44,7 @@ WORKERS = max(1, env_int("WORKERS", 32))
 TIMEOUT = env_float("TIMEOUT", 5)
 MAX_YAML = env_int("MAX_YAML", 0)
 KEEP_UDP = env_flag("KEEP_UDP", True)
-# 国家白名单: 逗号分隔的国家码 (如 JP,KR), 只影响 ovpn.yaml 订阅, 网页保持全量; 为空=不过滤
+# 国家白名单: 逗号分隔的国家码 (如 JP,KR), 同时作用于 ovpn.yaml 订阅和网页; 为空=不过滤
 INCLUDE_COUNTRIES = [c.strip().upper() for c in env_str("INCLUDE_COUNTRIES").split(",") if c.strip()]
 
 # 配置内容来自第三方, 写入 YAML 前必须校验
@@ -211,6 +211,14 @@ def main():
     if not alive:
         die("检查后剩余 0 个可用节点, 拒绝提交空结果")
 
+    if INCLUDE_COUNTRIES:
+        before = len(alive)
+        alive = [n for n in alive
+                 if (n["country_short"] or "").strip().upper() in INCLUDE_COUNTRIES]
+        log(f"国家白名单 {','.join(INCLUDE_COUNTRIES)}: {before} -> {len(alive)}")
+        if not alive:
+            die("国家白名单过滤后无可用节点 (本轮数据源无白名单国家)")
+
     log("== 4/4 生成输出文件 ==")
     isp_n = sum(1 for n in alive if n["ip_type"] == "residential")
     dc_n = sum(1 for n in alive if n["ip_type"] == "datacenter")
@@ -220,14 +228,6 @@ def main():
         log(f"家宽 {isp_n} 个, 机房 {dc_n} 个只在网页显示, 不写入 ovpn.yaml (写入 {len(yaml_nodes)} 个)")
     else:
         log(f"家宽 {isp_n} 个 (未超过阈值或未启用排除), 机房 {dc_n} 个一并写入")
-    if INCLUDE_COUNTRIES:
-        before = len(yaml_nodes)
-        yaml_nodes = [n for n in yaml_nodes
-                      if (n["country_short"] or "").strip().upper() in INCLUDE_COUNTRIES]
-        log(f"国家白名单 {','.join(INCLUDE_COUNTRIES)}: {before} -> {len(yaml_nodes)}")
-        if not yaml_nodes:
-            die(f"白名单过滤后剩余 0 个节点, 检查 INCLUDE_COUNTRIES 是否写错 "
-                f"(当前可用国家: {','.join(sorted({(n['country_short'] or '?').strip().upper() for n in alive}))})")
     if MAX_YAML > 0:
         # 只截断订阅: 延迟优先 (UDP 无延迟排最后)
         yaml_nodes.sort(key=lambda n: (n["latency_ms"] is None, n["latency_ms"] or 0))

@@ -58,6 +58,7 @@ worker/                私有订阅托管 Worker
 | `KEEP_UDP` | 1 | UDP 节点: 1=不检查直接保留, 0=丢弃 (工作流里设为 0) |
 | `MAX_YAML` | 0 | ovpn.yaml 最多保留 N 个, 0=全部 (按延迟优先截断; 网页仍显示全部) |
 | `EXCLUDE_DC` / `MIN_ISP` | 1 / 20 | 住宅节点超过阈值时, 订阅里剔除机房节点 |
+| `INCLUDE_COUNTRIES` | — | 国家白名单, 逗号分隔的国家码 (如 `JP,KR`), 同时作用于订阅和网页, 为空=不过滤 |
 | `VPNGATE_API` / `VPNGATE_MIRROR` | 官方 / GitHub 镜像 | 数据源 |
 
 本地试跑示例: `OUT_DIR=/tmp/site python ovpn.py`
