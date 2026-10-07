@@ -119,7 +119,7 @@ def cfg_directive(cfg, name, default):
 
 
 def build_clash_yaml(nodes):
-    """Clash proxies 列表。名字: 国家-类型-序号-ovpn。证书全网通用: 取第一个带完整证书的节点, 用 YAML 锚点定义, 其余引用。"""
+    """Clash proxies 列表。名字: 国家-类型-序号。证书全网通用: 取第一个带完整证书的节点, 用 YAML 锚点定义, 其余引用。"""
     for n in nodes:
         ca, cert, key = (pem_block(n["config"], t) for t in ("ca", "cert", "key"))
         if ca and cert and key:
@@ -136,7 +136,7 @@ def build_clash_yaml(nodes):
         region = country_label(n["country_short"], n["country_long"])
         group = (region, n["ip_type"])
         counters[group] = counters.get(group, 0) + 1
-        name = node_name(region, n["ip_type"], counters[group], "ovpn")
+        name = node_name(region, n["ip_type"], counters[group])
         cfg = n["config"]
         out += [
             f"  - name: {yaml_str(name)}",
@@ -194,6 +194,10 @@ def main():
 
     log("== 2/4 提取 OpenVPN 配置 ==")
     nodes = extract_nodes(rows)
+    unknown_n = sum(1 for n in nodes if n["ip_type"] == "unknown")
+    if unknown_n:
+        log(f"剔除 {unknown_n} 个未识别节点 (不加入节点列表)")
+        nodes = [n for n in nodes if n["ip_type"] != "unknown"]
     log(f"提取到 {len(nodes)} 个公网节点")
     if not nodes:
         die("没有提取到任何 OpenVPN 节点, 拒绝提交空结果")

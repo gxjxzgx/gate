@@ -73,7 +73,7 @@ MIN_ISP = env_int("MIN_ISP", 20)
 
 
 # ---------------------------------------------------------------- 节点命名
-# 规则: 地区-类型-序号-协议, 例: 日本-住宅-01-ovpn
+# 规则: 地区-类型-序号, 例: 日本-住宅-01
 TYPE_LABEL = {"residential": "住宅", "datacenter": "机房", "unknown": "未识别"}
 
 # ISO 国家码 -> 中文名 (未收录则回退国家码 / 英文原名)
@@ -102,9 +102,9 @@ def country_label(code, name=""):
     return COUNTRY_ZH.get(code) or (code if code and code != "?" else (name or "未知"))
 
 
-def node_name(region, ip_type, index, proto):
-    """统一的节点名: 地区-类型-序号-协议。"""
-    return f"{region}-{TYPE_LABEL.get(ip_type, TYPE_LABEL['unknown'])}-{index:02d}-{proto}"
+def node_name(region, ip_type, index):
+    """统一的节点名: 地区-类型-序号。"""
+    return f"{region}-{TYPE_LABEL.get(ip_type, TYPE_LABEL['unknown'])}-{index:02d}"
 
 
 # ---------------------------------------------------------------- 日志
