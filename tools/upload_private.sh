@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把私有订阅 (ovpn.yaml) 上传到私有 Worker (KV), 然后从 site/ 删除, 不发布到 Pages。
+# 把私有订阅 ovpn.yaml 上传到私有 Worker (KV), 然后从 site/ 删除, 不发布到 Pages。
 # 需要环境变量: WORKER_URL (如 https://sub.example.com, 不带末尾 /), ACCESS_TOKEN
 set -eu
 : "${WORKER_URL:?请设置 secret WORKER_URL}"
@@ -10,10 +10,7 @@ WORKER_URL="$(printf '%s' "$WORKER_URL" | tr -d '[:space:]')"
 WORKER_URL="${WORKER_URL%/}"
 ACCESS_TOKEN="$(printf '%s' "$ACCESS_TOKEN" | tr -d '[:space:]')"
 
-# 上传列表以 common.py 的 PRIVATE_FILES 为准 (单一来源);
-# Worker 端的 FILES 白名单是安全边界, 故意保持独立校验
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-mapfile -t FILES < <(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from common import PRIVATE_FILES; print("\n".join(PRIVATE_FILES))' "$ROOT")
+FILES=(ovpn.yaml)
 
 hint() {   # $1=HTTP 状态码  $2=文件名  $3=响应内容
   case "$1" in
