@@ -1,1 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPN Gate · OpenVPN 节点监控</title>
+<style>
+  :root {
+    --bg: #0b1120; --panel: #111a2e; --panel2: #16233c; --border: #243450;
+    --text: #dbe7ff; --muted: #7f93b8; --accent: #4cc2ff; --ok: #2fd08a;
+    --warn: #ffb84d; --res: #b48cff; --dc: #ffb84d; --unk: #8a9bb5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; min-height: 100vh; padding: 20px; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .card .k { color: var(--muted); font-size: 12px; }
+  .card .v { font-size: 24px; font-weight: 700; margin-top: 4px; }
+  .card .v small { font-size: 13px; font-weight: 400; color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+  .pill { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; user-select: none; }
+  .pill.on { border-color: var(--accent); color: var(--accent); }
+  .legend { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  .country { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .country .head { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--panel2); font-weight: 600; cursor: pointer; flex-wrap: wrap; gap: 6px; }
+  .country .head .tag { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .country table { display: none; }
+  .country.open table { display: table; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 9px 12px; text-align: left; border-top: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr:hover td { background: rgba(76,194,255,.05); }
+  .lat { color: var(--ok); font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; }
+  .b-res { background: rgba(180,140,255,.15); color: var(--res); }
+  .b-dc { background: rgba(255,184,77,.15); color: var(--dc); }
+  .b-unk { background: rgba(138,155,181,.15); color: var(--unk); }
+  code.copy { cursor: pointer; }
+  code.copy:hover { outline: 1px solid var(--accent); }
+  .proto-tcp { color: var(--accent); }
+  .proto-udp { color: var(--warn); }
+  .empty { color: var(--muted); padding: 30px; text-align: center; }
+  .footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; }
+  code { font-family: Consolas, monospace; background: var(--panel2); padding: 2px 6px; border-radius: 5px; font-size: 12px; }
+  @media (max-width: 700px) { th, td { padding: 7px 8px; } .hide-m { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔒 VPN Gate · OpenVPN 节点监控</h1>
+  <div class="sub">GitHub Actions 每小时刷新：提取 VPN Gate OpenVPN 配置并做 TCP 存活检查</div>
 
+  <div class="cards" id="ovpn-cards"></div>
+  <div class="bar" data-s="ovpn">
+    <span class="pill on" data-f="all">全部</span>
+    <span class="pill" data-f="residential">住宅 IP</span>
+    <span class="pill" data-f="datacenter">数据中心</span>
+    <span class="pill" data-f="unknown">未识别</span>
+  </div>
+  <div class="legend">「住宅 / 数据中心」按 VPN Gate 主机名前缀估算（vpn+数字→住宅，public-vpn→机房），非严格判定。住宅节点 &gt; 20 个时，机房节点只在此页显示，不写入订阅；列表按 住宅 → 机房 → 未识别 排序。</div>
+  <div id="ovpn-countries"></div>
+
+  <div class="footer" id="foot">加载中…</div>
+</div>
+
+<script>
+let OVPN = null;
+let FILTER = 'all';
+// 当前展开的国家; null = 尚未初始化 (首次渲染时默认展开第一个)
+let OPEN = null;
+const TYPE_RANK = { residential: 0, datacenter: 1 };
+function rank(t) { return TYPE_RANK[t] != null ? TYPE_RANK[t] : 2; }
+
+const ZH = {
+  'Japan': '日本', 'Korea Republic of': '韩国', 'Korea': '韩国',
+  'United States': '美国', 'Thailand': '泰国', 'Russian Federation': '俄罗斯',
+  'Russia': '俄罗斯', 'United Kingdom': '英国', 'Australia': '澳大利亚',
+  'Romania': '罗马尼亚', 'Canada': '加拿大', 'Viet Nam': '越南', 'Vietnam': '越南',
+  'Finland': '芬兰', 'Grenada': '格林纳达', 'China': '中国', 'Myanmar': '缅甸',
+  'Germany': '德国', 'France': '法国', 'Netherlands': '荷兰', 'Singapore': '新加坡',
+  'Hong Kong': '香港', 'Taiwan': '台湾', 'India': '印度', 'Brazil': '巴西',
+  'Italy': '意大利', 'Spain': '西班牙', 'Sweden': '瑞典', 'Norway': '挪威',
+  'Poland': '波兰', 'Ukraine': '乌克兰', 'Turkey': '土耳其', 'Turkiye': '土耳其',
+  'Indonesia': '印度尼西亚', 'Malaysia': '马来西亚', 'Philippines': '菲律宾',
+  'Mexico': '墨西哥', 'Argentina': '阿根廷', 'Chile': '智利', 'Colombia': '哥伦比亚',
+  'South Africa': '南非', 'Egypt': '埃及', 'Israel': '以色列',
+  'United Arab Emirates': '阿联酋', 'Saudi Arabia': '沙特阿拉伯',
+  'Pakistan': '巴基斯坦', 'Bangladesh': '孟加拉国', 'Nepal': '尼泊尔',
+  'Sri Lanka': '斯里兰卡', 'Cambodia': '柬埔寨', 'Laos': '老挝', 'Mongolia': '蒙古',
+  'Kazakhstan': '哈萨克斯坦', 'Belarus': '白俄罗斯', 'Moldova': '摩尔多瓦',
+  'Lithuania': '立陶宛', 'Latvia': '拉脱维亚', 'Estonia': '爱沙尼亚',
+  'Czech Republic': '捷克', 'Czechia': '捷克', 'Slovakia': '斯洛伐克',
+  'Hungary': '匈牙利', 'Austria': '奥地利', 'Switzerland': '瑞士',
+  'Belgium': '比利时', 'Ireland': '爱尔兰', 'Portugal': '葡萄牙', 'Greece': '希腊',
+  'Denmark': '丹麦', 'New Zealand': '新西兰', 'Serbia': '塞尔维亚',
+  'Croatia': '克罗地亚', 'Bulgaria': '保加利亚', 'Albania': '阿尔巴尼亚'
+};
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function zhCountry(en) { return esc(ZH[en] || en); }
+
+function card(k, v, sub) {
+  return '<div class="card"><div class="k">' + k + '</div><div class="v">' + v + '</div>' +
+    (sub ? '<div class="k">' + sub + '</div>' : '') + '</div>';
+}
+function badge(t) {
+  if (t === 'residential') return '<span class="badge b-res">住宅</span>';
+  if (t === 'datacenter') return '<span class="badge b-dc">机房</span>';
+  return '<span class="badge b-unk">未识别</span>';
+}
+function latCell(ms, emptyText) {
+  return ms != null ? '<td class="lat">' + esc(ms) + ' ms</td>'
+                    : '<td style="color:var(--muted)">' + (emptyText || '-') + '</td>';
+}
+// 国家分组卡片: groups = [[name, {code, nodes}], ...]
+function countryBlocks(groups) {
+  if (!groups.length) return '<div class="country"><div class="empty">没有符合当前筛选的节点</div></div>';
+  if (OPEN === null) OPEN = new Set([groups[0][0]]);
+  return groups.map(function (x) {
+    const name = x[0], g = x[1];
+    const res = g.nodes.filter(function (n) { return n.ip_type === 'residential'; }).length;
+    const dc = g.nodes.filter(function (n) { return n.ip_type === 'datacenter'; }).length;
+    return '<div class="country' + (OPEN.has(name) ? ' open' : '') + '" data-k="' + esc(name) + '">' +
+      '<div class="head"><span>🌏 ' + zhCountry(name) + ' <span class="tag">' + esc(g.code || '') + '</span></span>' +
+      '<span class="tag">' + g.nodes.length + ' 个节点 · 住宅 ' + res + ' · 机房 ' + dc + '</span></div>' +
+      '<table><thead><tr><th>地址</th><th>协议</th><th>延迟</th><th>类型</th></tr></thead><tbody>' +
+      g.nodes.map(function (e) {
+        const proto = e.proto === 'tcp' ? 'tcp' : 'udp';
+        return '<tr><td><code class="copy" title="点击复制地址">' + esc(e.host) + ':' + esc(e.port) + '</code></td>' +
+          '<td class="proto-' + proto + '">openvpn/' + proto + '</td>' + latCell(e.latency_ms, '未检查') +
+          '<td>' + badge(e.ip_type) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }).join('');
+}
+
+function renderOvpn() {
+  const d = OVPN, box = document.getElementById('ovpn-countries');
+  if (!d) { document.getElementById('ovpn-cards').innerHTML = '<div class="empty">OpenVPN 数据加载失败</div>'; box.innerHTML = ''; return; }
+  const es = (d.entries || []).slice().sort(function (a, b) { return rank(a.ip_type) - rank(b.ip_type); });
+  const res = es.filter(function (e) { return e.ip_type === 'residential'; }).length;
+  const dc = es.filter(function (e) { return e.ip_type === 'datacenter'; }).length;
+  const unk = es.length - res - dc;
+  document.getElementById('ovpn-cards').innerHTML =
+    card('节点数量', esc(d.checked || es.length)) + card('可用数量', esc(d.total || es.length)) +
+    card('国家数量', esc(Object.keys(d.countries || {}).length)) + card('住宅 / 机房 (估算)', esc(res), '机房 ' + dc + ' · 未识别 ' + unk) +
+    card('更新时间', '<small>' + esc(d.updated_at || '—') + '</small>');
+  const groups = {};
+  es.forEach(function (e) {
+    if (FILTER !== 'all' && e.ip_type !== FILTER) return;
+    const k = e.country_long || 'Unknown';
+    groups[k] = groups[k] || { code: e.country_short, nodes: [] };
+    groups[k].nodes.push(e);
+  });
+  const list = Object.entries(groups).sort(function (a, b) { return b[1].nodes.length - a[1].nodes.length; });
+  box.innerHTML = countryBlocks(list);
+}
+
+// 交互: 过滤标签 / 展开国家 / 点击复制地址
+document.addEventListener('click', function (e) {
+  const pill = e.target.closest('.pill');
+  if (pill) {
+    FILTER = pill.dataset.f;
+    pill.closest('.bar').querySelectorAll('.pill').forEach(function (p) { p.classList.toggle('on', p === pill); });
+    renderOvpn();
+    return;
+  }
+  const head = e.target.closest('.country .head');
+  if (head) {
+    const box = head.parentElement;
+    const open = box.classList.toggle('open');
+    if (OPEN) { if (open) OPEN.add(box.dataset.k); else OPEN.delete(box.dataset.k); }
+    return;
+  }
+  const code = e.target.closest('code.copy');
+  if (code && navigator.clipboard) navigator.clipboard.writeText(code.textContent);
+});
+
+async function load() {
+  try {
+    const r = await fetch('ovpn.json', { cache: 'no-store' });
+    OVPN = r.ok ? await r.json() : null;
+  } catch (e) { OVPN = null; }
+  renderOvpn();
+  document.getElementById('foot').textContent =
+    'OpenVPN 更新时间 ' + (OVPN ? OVPN.updated_at : '?') + '（北京时间）· 页面每 5 分钟自动刷新';
+}
+load();
+setInterval(load, 300000);
+</script>
+</body>
+</html>
