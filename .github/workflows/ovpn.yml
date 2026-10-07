@@ -1,11 +1,12 @@
-name: OVPN Check
+name: OpenVPN Refresh
 
 # VPN Gate OpenVPN 节点提取 + TCP 存活检查, 每小时一次。
 # ovpn.yaml 上传到私有 Worker (不发布到 Pages); ovpn.json 发布到站点根目录。
 # 住宅(ISP)节点 > 20 个时, 机房节点只进 ovpn.json (网页显示), 不进 ovpn.yaml。
+# 每次运行结束清理旧的运行记录, 只保留最新 3 条。
 on:
   schedule:
-    - cron: "16 */1 * * *"
+    - cron: "16 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -63,3 +64,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Keep only latest 3 workflow runs
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ids="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ovpn.yml/runs?per_page=50" \
+            --jq '[.workflow_runs | sort_by(.run_number) | reverse | .[3:] | .[].id] | join(" ")')"
+          for id in $ids; do
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/$id" --silent || true
+          done
+          echo "workflow runs cleanup done"
