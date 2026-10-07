@@ -1,4 +1,4 @@
-# gatetool-ovpn
+# gate-ovpn
 
 VPN Gate OpenVPN 节点自动刷新流水线: 每小时拉取 VPN Gate 数据, 提取 OpenVPN 配置并做 TCP 存活检查,
 发布到 GitHub Pages 监控页, Clash 订阅上传到私有 Cloudflare Worker。
