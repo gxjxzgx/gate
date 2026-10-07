@@ -37,7 +37,6 @@
   .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; }
   .b-res { background: rgba(180,140,255,.15); color: var(--res); }
   .b-dc { background: rgba(255,184,77,.15); color: var(--dc); }
-  .b-unk { background: rgba(138,155,181,.15); color: var(--unk); }
   code.copy { cursor: pointer; }
   code.copy:hover { outline: 1px solid var(--accent); }
   .proto-tcp { color: var(--accent); }
@@ -58,9 +57,8 @@
     <span class="pill on" data-f="all">全部</span>
     <span class="pill" data-f="residential">住宅 IP</span>
     <span class="pill" data-f="datacenter">数据中心</span>
-    <span class="pill" data-f="unknown">未识别</span>
   </div>
-  <div class="legend">「住宅 / 数据中心」按 VPN Gate 主机名前缀估算（vpn+数字→住宅，public-vpn→机房），非严格判定。住宅节点 &gt; 20 个时，机房节点只在此页显示，不写入订阅；列表按 住宅 → 机房 → 未识别 排序。</div>
+  <div class="legend">「住宅 / 机房」按 VPN Gate 主机名前缀估算（vpn+数字→住宅，public-vpn→机房），非严格判定，未识别节点不加入列表。住宅节点 &gt; 20 个时，机房节点只在此页显示，不写入订阅；列表按 住宅 → 机房 排序。</div>
   <div id="ovpn-countries"></div>
 
   <div class="footer" id="foot">加载中…</div>
@@ -110,9 +108,8 @@ function card(k, v, sub) {
     (sub ? '<div class="k">' + sub + '</div>' : '') + '</div>';
 }
 function badge(t) {
-  if (t === 'residential') return '<span class="badge b-res">住宅</span>';
   if (t === 'datacenter') return '<span class="badge b-dc">机房</span>';
-  return '<span class="badge b-unk">未识别</span>';
+  return '<span class="badge b-res">住宅</span>';
 }
 function latCell(ms, emptyText) {
   return ms != null ? '<td class="lat">' + esc(ms) + ' ms</td>'
@@ -145,10 +142,9 @@ function renderOvpn() {
   const es = (d.entries || []).slice().sort(function (a, b) { return rank(a.ip_type) - rank(b.ip_type); });
   const res = es.filter(function (e) { return e.ip_type === 'residential'; }).length;
   const dc = es.filter(function (e) { return e.ip_type === 'datacenter'; }).length;
-  const unk = es.length - res - dc;
   document.getElementById('ovpn-cards').innerHTML =
     card('节点数量', esc(d.checked || es.length)) + card('可用数量', esc(d.total || es.length)) +
-    card('国家数量', esc(Object.keys(d.countries || {}).length)) + card('住宅 / 机房 (估算)', esc(res), '机房 ' + dc + ' · 未识别 ' + unk) +
+    card('国家数量', esc(Object.keys(d.countries || {}).length)) + card('住宅 / 机房 (估算)', esc(res), '机房 ' + dc) +
     card('更新时间', '<small>' + esc(d.updated_at || '—') + '</small>');
   const groups = {};
   es.forEach(function (e) {
