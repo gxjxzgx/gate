@@ -11,6 +11,8 @@
     --warn: #ffb84d; --res: #b48cff; --dc: #ffb84d; --unk: #8a9bb5;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* 默认显示比例 75% (仅桌面端; 手机上再缩小会看不清)。想改比例只改这里的数字 */
+  @media (min-width: 701px) { html { zoom: 0.75; } }
   body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; min-height: 100vh; padding: 20px; }
   .wrap { max-width: 1100px; margin: 0 auto; }
   h1 { font-size: 22px; margin-bottom: 4px; }
