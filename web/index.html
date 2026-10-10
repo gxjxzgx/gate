@@ -11,8 +11,8 @@
     --warn: #ffb84d; --res: #b48cff; --dc: #ffb84d; --unk: #8a9bb5;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  /* 默认显示比例 75% (仅桌面端; 手机上再缩小会看不清)。想改比例只改这里的数字 */
-  @media (min-width: 701px) { html { zoom: 0.75; } }
+  /* 默认显示比例 75% (桌面和手机都生效)。想改比例只改这里的数字 */
+  html { zoom: 0.75; }
   body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; min-height: 100vh; padding: 20px; }
   .wrap { max-width: 1100px; margin: 0 auto; }
   h1 { font-size: 22px; margin-bottom: 4px; }
@@ -26,13 +26,13 @@
   .pill { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; user-select: none; }
   .pill.on { border-color: var(--accent); color: var(--accent); }
   .legend { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
-  .country { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .country { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 14px; overflow-x: auto; }
   .country .head { display: flex; justify-content: space-between; padding: 12px 16px; background: var(--panel2); font-weight: 600; cursor: pointer; flex-wrap: wrap; gap: 6px; }
   .country .head .tag { font-size: 12px; color: var(--muted); font-weight: 400; }
   .country table { display: none; }
   .country.open table { display: table; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { padding: 9px 12px; text-align: left; border-top: 1px solid var(--border); }
+  th, td { padding: 9px 12px; text-align: left; border-top: 1px solid var(--border); white-space: nowrap; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   tr:hover td { background: rgba(76,194,255,.05); }
   .lat { color: var(--ok); font-variant-numeric: tabular-nums; }
@@ -46,7 +46,7 @@
   .empty { color: var(--muted); padding: 30px; text-align: center; }
   .footer { color: var(--muted); font-size: 12px; margin-top: 24px; text-align: center; }
   code { font-family: Consolas, monospace; background: var(--panel2); padding: 2px 6px; border-radius: 5px; font-size: 12px; }
-  @media (max-width: 700px) { th, td { padding: 7px 8px; } .hide-m { display: none; } }
+  @media (max-width: 700px) { body { padding: 12px; } th, td { padding: 7px 8px; } .hide-m { display: none; } }
 </style>
 </head>
 <body>
