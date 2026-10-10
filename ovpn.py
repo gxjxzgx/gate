@@ -34,7 +34,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from common import (
-    OUT_DIR, classify_host, country_label, decode_config, drop_datacenter, env_flag, env_float,
+    MIN_ISP, OUT_DIR, classify_host, country_label, decode_config, drop_datacenter, env_flag, env_float,
     env_int, env_str, fetch_vpngate_rows, is_public_host, make_logger, node_name, now_bj, parse_remote,
     type_rank, write_json, write_text, yaml_str,
 )
@@ -141,8 +141,21 @@ def cfg_directive(cfg, name, default):
     return value if TOKEN_RE.match(value) else default
 
 
-def build_header(source, nodes, total_alive):
-    """订阅文件头部注释: 更新时间 / 数据来源 / 节点统计 / 使用提示。"""
+def skipped_lines(dc_dropped, truncated):
+    """「未写入本文件」说明行: 没有被排除的节点时不输出。"""
+    if not (dc_dropped or truncated):
+        return []
+    reasons = []
+    if dc_dropped:
+        reasons.append(f"机房 {dc_dropped}, 住宅节点超过 {MIN_ISP} 个时机房只在网页显示")
+    if truncated:
+        reasons.append(f"超出 MAX_YAML={MAX_YAML} 上限 {truncated} 个")
+    return [f"# 未写入本文件: {dc_dropped + truncated} 个 ({'; '.join(reasons)})"]
+
+
+def build_header(source, nodes, dc_dropped=0, truncated=0):
+    """订阅文件头部注释: 更新时间 / 数据来源 / 节点统计 / 使用提示。
+    dc_dropped: 因「住宅够多」而没写入的机房节点数; truncated: 因 MAX_YAML 上限而没写入的节点数。"""
     isp = sum(1 for n in nodes if n["ip_type"] == "residential")
     dc = sum(1 for n in nodes if n["ip_type"] == "datacenter")
     regions = {}
@@ -157,7 +170,8 @@ def build_header(source, nodes, total_alive):
         f"#   本次实际使用: {source}",
         "#   节点由志愿者提供, 随时可能下线; 本文件由 GitHub Actions 定时生成",
         "#",
-        f"# 本文件节点: {len(nodes)} 个 (住宅 {isp} / 机房 {dc}); 检测后可用共 {total_alive} 个",
+        f"# 本文件节点: {len(nodes)} 个 (住宅 {isp} / 机房 {dc})",
+        *skipped_lines(dc_dropped, truncated),
         f"# 地区分布: {region_text}",
         "# 命名规则: 地区-类型-序号 (住宅/机房按主机名前缀估算, 仅供参考)",
         "# 检测方式: 仅做 TCP 连通检查, 在 GitHub 机房测得, 不代表你本地线路可用" + ("" if KEEP_UDP else "; 已丢弃 UDP 节点"),
@@ -276,20 +290,23 @@ def main():
     isp_n = sum(1 for n in alive if n["ip_type"] == "residential")
     dc_n = sum(1 for n in alive if n["ip_type"] == "datacenter")
     yaml_nodes = alive
+    dc_dropped = truncated = 0   # 没写入订阅的节点数, 写进订阅头部说明
     if drop_datacenter(isp_n):
         yaml_nodes = [n for n in alive if n["ip_type"] != "datacenter"]
+        dc_dropped = len(alive) - len(yaml_nodes)
         log(f"家宽 {isp_n} 个, 机房 {dc_n} 个只在网页显示, 不写入 ovpn.yaml (写入 {len(yaml_nodes)} 个)")
     else:
         log(f"家宽 {isp_n} 个 (未超过阈值或未启用排除), 机房 {dc_n} 个一并写入")
     if MAX_YAML > 0 and len(yaml_nodes) > MAX_YAML:
         # 只截断订阅: 延迟优先 (UDP 无延迟排最后); 截断后仍保持 alive 的排序
+        truncated = len(yaml_nodes) - MAX_YAML
         keep = sorted(yaml_nodes, key=lambda n: (n["latency_ms"] is None, n["latency_ms"] or 0))[:MAX_YAML]
         keep_ids = {id(n) for n in keep}
         yaml_nodes = [n for n in alive if id(n) in keep_ids]
 
     yaml_path = os.path.join(OUT_DIR, "ovpn.yaml")
     json_path = os.path.join(OUT_DIR, "ovpn.json")
-    write_text(yaml_path, build_header(source, yaml_nodes, len(alive)) + build_clash_yaml(yaml_nodes))
+    write_text(yaml_path, build_header(source, yaml_nodes, dc_dropped, truncated) + build_clash_yaml(yaml_nodes))
     write_json(json_path, build_json(alive, checked=len(nodes)))
     log(f"生成 {yaml_path} ({len(yaml_nodes)} 个节点)")
     log(f"生成 {json_path} ({len(alive)} 个节点)")
