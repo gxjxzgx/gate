@@ -121,6 +121,41 @@ def cfg_directive(cfg, name, default):
     return value if TOKEN_RE.match(value) else default
 
 
+def build_header(source, nodes, total_alive):
+    """订阅文件头部注释: 更新时间 / 数据来源 / 节点统计 / 使用提示。"""
+    isp = sum(1 for n in nodes if n["ip_type"] == "residential")
+    dc = sum(1 for n in nodes if n["ip_type"] == "datacenter")
+    regions = {}
+    for n in nodes:
+        label = country_label(n["country_short"], n["country_long"])
+        regions[label] = regions.get(label, 0) + 1
+    region_text = " ".join(f"{k}{v}" for k, v in sorted(regions.items(), key=lambda kv: -kv[1]))
+    lines = [
+        f"# 自动更新: {now_bj('%Y-%m-%d %H:%M:%S')} (每小时重新检测)",
+        "#",
+        "# 数据来源: VPN Gate (筑波大学公益项目) 公开的志愿者 OpenVPN 服务器列表",
+        "#   官方 API: http://www.vpngate.net/api/iphone/",
+        f"#   本次实际使用: {source}",
+        "#   节点由志愿者提供, 随时可能下线; 本文件由 GitHub Actions 定时生成",
+        "#",
+        f"# 本文件节点: {len(nodes)} 个 (住宅 {isp} / 机房 {dc}); 检测后可用共 {total_alive} 个",
+        f"# 地区分布: {region_text}",
+        "# 命名规则: 地区-类型-序号 (住宅/机房按主机名前缀估算, 仅供参考)",
+        "# 检测方式: 仅做 TCP 连通检查, 在 GitHub 机房测得, 不代表你本地线路可用" + ("" if KEEP_UDP else "; 已丢弃 UDP 节点"),
+        "#",
+        "# 使用提示:",
+        "#   1. 节点用户名/密码均为 vpn, 证书为 VPN Gate 通用证书 (已用 YAML 锚点共用)",
+        "#   2. 延迟高 / 握手超时 / 直连不稳时, 建议使用链式代理 (前置代理):",
+        "#      先通过一个稳定的代理节点, 再连接本文件中的 OpenVPN 节点",
+        "#      Mihomo 示例: 在节点下添加  dialer-proxy: 你的前置代理或代理组名",
+        "#      (需要所用内核/客户端支持 dialer-proxy, 且仅 TCP 节点可链式)",
+        "#   3. 住宅节点通常比机房节点更不易被识别, 优先选择住宅节点",
+        "#   4. 节点频繁失效属正常现象, 订阅每小时自动刷新",
+        "",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def build_clash_yaml(nodes):
     """Clash proxies 列表。名字: 国家-类型-序号。证书全网通用: 取第一个带完整证书的节点, 用 YAML 锚点定义, 其余引用。"""
     for n in nodes:
@@ -191,7 +226,7 @@ def build_json(nodes, checked):
 def main():
     log("== 1/4 拉取 VPN Gate 数据 ==")
     try:
-        rows, _source = fetch_vpngate_rows(log)
+        rows, source = fetch_vpngate_rows(log)
     except RuntimeError as exc:
         die(f"所有数据源都不可用: {exc}")
 
@@ -236,7 +271,7 @@ def main():
     alive, yaml_nodes = sort_nodes(alive), sort_nodes(yaml_nodes)
     yaml_path = os.path.join(OUT_DIR, "ovpn.yaml")
     json_path = os.path.join(OUT_DIR, "ovpn.json")
-    write_text(yaml_path, build_clash_yaml(yaml_nodes))
+    write_text(yaml_path, build_header(source, yaml_nodes, len(alive)) + build_clash_yaml(yaml_nodes))
     write_json(json_path, build_json(alive, checked=len(nodes)))
     log(f"生成 {yaml_path} ({len(yaml_nodes)} 个节点)")
     log(f"生成 {json_path} ({len(alive)} 个节点)")
