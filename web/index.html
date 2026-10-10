@@ -58,7 +58,7 @@
     <span class="pill" data-f="residential">住宅 IP</span>
     <span class="pill" data-f="datacenter">数据中心</span>
   </div>
-  <div class="legend">「住宅 / 机房」按 VPN Gate 主机名前缀估算（vpn+数字→住宅，public-vpn→机房），非严格判定，未识别节点不加入列表。住宅节点 &gt; 20 个时，机房节点只在此页显示，不写入订阅；列表按 住宅 → 机房 排序。</div>
+  <div class="legend">「住宅 / 机房」按 VPN Gate 主机名前缀估算（vpn+数字→住宅，public-vpn→机房），非严格判定，未识别节点不加入列表。住宅节点 &gt; 20 个时，机房节点只在此页显示，不写入订阅；同类型内按延迟从低到高排序；「名称」与订阅里的节点名一致。</div>
   <div id="ovpn-countries"></div>
 
   <div class="footer" id="foot">加载中…</div>
@@ -72,36 +72,11 @@ let OPEN = null;
 const TYPE_RANK = { residential: 0, datacenter: 1 };
 function rank(t) { return TYPE_RANK[t] != null ? TYPE_RANK[t] : 2; }
 
-const ZH = {
-  'Japan': '日本', 'Korea Republic of': '韩国', 'Korea': '韩国',
-  'United States': '美国', 'Thailand': '泰国', 'Russian Federation': '俄罗斯',
-  'Russia': '俄罗斯', 'United Kingdom': '英国', 'Australia': '澳大利亚',
-  'Romania': '罗马尼亚', 'Canada': '加拿大', 'Viet Nam': '越南', 'Vietnam': '越南',
-  'Finland': '芬兰', 'Grenada': '格林纳达', 'China': '中国', 'Myanmar': '缅甸',
-  'Germany': '德国', 'France': '法国', 'Netherlands': '荷兰', 'Singapore': '新加坡',
-  'Hong Kong': '香港', 'Taiwan': '台湾', 'India': '印度', 'Brazil': '巴西',
-  'Italy': '意大利', 'Spain': '西班牙', 'Sweden': '瑞典', 'Norway': '挪威',
-  'Poland': '波兰', 'Ukraine': '乌克兰', 'Turkey': '土耳其', 'Turkiye': '土耳其',
-  'Indonesia': '印度尼西亚', 'Malaysia': '马来西亚', 'Philippines': '菲律宾',
-  'Mexico': '墨西哥', 'Argentina': '阿根廷', 'Chile': '智利', 'Colombia': '哥伦比亚',
-  'South Africa': '南非', 'Egypt': '埃及', 'Israel': '以色列',
-  'United Arab Emirates': '阿联酋', 'Saudi Arabia': '沙特阿拉伯',
-  'Pakistan': '巴基斯坦', 'Bangladesh': '孟加拉国', 'Nepal': '尼泊尔',
-  'Sri Lanka': '斯里兰卡', 'Cambodia': '柬埔寨', 'Laos': '老挝', 'Mongolia': '蒙古',
-  'Kazakhstan': '哈萨克斯坦', 'Belarus': '白俄罗斯', 'Moldova': '摩尔多瓦',
-  'Lithuania': '立陶宛', 'Latvia': '拉脱维亚', 'Estonia': '爱沙尼亚',
-  'Czech Republic': '捷克', 'Czechia': '捷克', 'Slovakia': '斯洛伐克',
-  'Hungary': '匈牙利', 'Austria': '奥地利', 'Switzerland': '瑞士',
-  'Belgium': '比利时', 'Ireland': '爱尔兰', 'Portugal': '葡萄牙', 'Greece': '希腊',
-  'Denmark': '丹麦', 'New Zealand': '新西兰', 'Serbia': '塞尔维亚',
-  'Croatia': '克罗地亚', 'Bulgaria': '保加利亚', 'Albania': '阿尔巴尼亚'
-};
 function esc(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
-function zhCountry(en) { return esc(ZH[en] || en); }
 
 function card(k, v, sub) {
   return '<div class="card"><div class="k">' + k + '</div><div class="v">' + v + '</div>' +
@@ -124,12 +99,13 @@ function countryBlocks(groups) {
     const res = g.nodes.filter(function (n) { return n.ip_type === 'residential'; }).length;
     const dc = g.nodes.filter(function (n) { return n.ip_type === 'datacenter'; }).length;
     return '<div class="country' + (OPEN.has(name) ? ' open' : '') + '" data-k="' + esc(name) + '">' +
-      '<div class="head"><span>🌏 ' + zhCountry(name) + ' <span class="tag">' + esc(g.code || '') + '</span></span>' +
+      '<div class="head"><span>🌏 ' + esc(name) + ' <span class="tag">' + esc(g.code || '') + '</span></span>' +
       '<span class="tag">' + g.nodes.length + ' 个节点 · 住宅 ' + res + ' · 机房 ' + dc + '</span></div>' +
-      '<table><thead><tr><th>地址</th><th>协议</th><th>延迟</th><th>类型</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>名称</th><th>地址</th><th>协议</th><th>延迟</th><th>类型</th></tr></thead><tbody>' +
       g.nodes.map(function (e) {
         const proto = e.proto === 'tcp' ? 'tcp' : 'udp';
-        return '<tr><td><code class="copy" title="点击复制地址">' + esc(e.host) + ':' + esc(e.port) + '</code></td>' +
+        return '<tr><td><code class="copy" title="点击复制名称">' + esc(e.name || '-') + '</code></td>' +
+          '<td><code class="copy" title="点击复制地址">' + esc(e.host) + ':' + esc(e.port) + '</code></td>' +
           '<td class="proto-' + proto + '">openvpn/' + proto + '</td>' + latCell(e.latency_ms, '未检查') +
           '<td>' + badge(e.ip_type) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -149,7 +125,7 @@ function renderOvpn() {
   const groups = {};
   es.forEach(function (e) {
     if (FILTER !== 'all' && e.ip_type !== FILTER) return;
-    const k = e.country_long || 'Unknown';
+    const k = e.region || e.country_long || 'Unknown';
     groups[k] = groups[k] || { code: e.country_short, nodes: [] };
     groups[k].nodes.push(e);
   });
