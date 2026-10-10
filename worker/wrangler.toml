@@ -2,8 +2,11 @@ name = "openvp-subs"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
-[vars]
-PAGES_URL = "https://<用户>.github.io/<仓库>"   # 或你的 Pages 自定义域名, 不带末尾 /
+# 可选: 让 Worker 主域名显示监控页并转发 ovpn.json。
+# 填成你的 Pages 站点根地址 (不带末尾 /) 后取消注释; 不需要就保持注释,
+# 否则占位符会被原样部署, 主页会返回 502。
+# [vars]
+# PAGES_URL = "https://<用户>.github.io/<仓库>"
 
 [[kv_namespaces]]
 binding = "SUBS"
