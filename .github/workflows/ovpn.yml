@@ -38,9 +38,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/ovpn.yml/enable" || true
 
-      - name: Restore site from Pages
-        env:
-          PAGES_URL: ${{ vars.PAGES_URL }}
+      - name: Prepare site
         run: bash tools/prepare_site.sh
 
       - name: Extract OpenVPN nodes
@@ -49,7 +47,7 @@ jobs:
           WORKERS: "32"
           TIMEOUT: "5"
           KEEP_UDP: "0"   # UDP 无法做 TCP 检查, 直接丢弃
-         # INCLUDE_COUNTRIES: "JP,KR,SG,TW,US,GB,UK,AU,VN,DE,FR"   # 国家白名单: 日韩新台美英澳越德法; 只影响订阅
+          # INCLUDE_COUNTRIES: "JP,KR,SG,TW,US,GB,UK,AU,VN,DE,FR"   # 国家白名单: 日韩新台美英澳越德法; 同时作用于订阅和网页
         run: python ovpn.py
 
       - name: Upload private subscriptions to Worker
