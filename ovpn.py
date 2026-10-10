@@ -6,10 +6,12 @@ ovpn.py —— VPN Gate OpenVPN 节点提取 + TCP 存活检查 (工作流: ovpn
 流程:
   1. 拉取 VPN Gate 数据 (官方 CSV, 失败时回退 GitHub 镜像)
   2. 解码每个服务器的 OpenVPN 配置, 提取 remote 地址 / 端口 / 协议 (只接受公网地址)
+     并按 INCLUDE_COUNTRIES 做国家白名单过滤 (先过滤再检查, 省掉无用的连接)
   3. 并发 TCP 连通检查; UDP 无法用 TCP 探测, 按 KEEP_UDP 保留或丢弃
-  4. 输出到 OUT_DIR:
-       ovpn.json   网页数据 (公开, 含全部可用节点, 住宅 > 机房 > 未识别)
+  4. 排序 (地区 → 住宅 > 机房 → 延迟从低到高) 并统一命名, 输出到 OUT_DIR:
+       ovpn.json   网页数据 (公开, 含全部可用节点)
        ovpn.yaml   Clash 订阅 (私有, 上传到 Worker)
+     两个文件里同一节点的名字完全一致 (地区-类型-序号)。
      住宅节点超过 MIN_ISP 个时, 机房节点只留在 ovpn.json, 不进 ovpn.yaml。
 
 退出码: 0 正常; 1 硬性失败 (数据源全挂 / 没有提取到节点 / 全部不可达 / 程序异常)。
@@ -102,11 +104,29 @@ def check_nodes(nodes):
     return alive
 
 
+def region_of(node):
+    return country_label(node["country_short"], node["country_long"])
+
+
 def sort_nodes(nodes):
-    """国家码 → 住宅 > 机房 > 未识别 → 地址。"""
+    """地区 → 住宅 > 机房 → 延迟从低到高 (UDP 无延迟排最后) → 地址。
+    按中文地区名而不是国家码排, 这样 GB / UK 这类同名地区会排在一起, 序号才连续。"""
     return sorted(nodes, key=lambda n: (
-        n["country_short"], type_rank(n["ip_type"]), n["remote_host"], n["remote_port"],
+        region_of(n), type_rank(n["ip_type"]),
+        n["latency_ms"] is None, n["latency_ms"] or 0,
+        n["remote_host"], n["remote_port"],
     ))
+
+
+def assign_names(nodes):
+    """给已排好序的节点统一命名 (地区-类型-序号), 序号在同地区同类型内从 01 起。
+    网页和订阅共用这一份名字, 订阅里剔除节点后序号会留空, 但不会和网页对不上。"""
+    counters = {}
+    for n in nodes:
+        n["region"] = region_of(n)
+        group = (n["region"], n["ip_type"])
+        counters[group] = counters.get(group, 0) + 1
+        n["name"] = node_name(n["region"], n["ip_type"], counters[group])
 
 
 # ---------------------------------------------------------------- 输出
@@ -127,8 +147,7 @@ def build_header(source, nodes, total_alive):
     dc = sum(1 for n in nodes if n["ip_type"] == "datacenter")
     regions = {}
     for n in nodes:
-        label = country_label(n["country_short"], n["country_long"])
-        regions[label] = regions.get(label, 0) + 1
+        regions[n["region"]] = regions.get(n["region"], 0) + 1
     region_text = " ".join(f"{k}{v}" for k, v in sorted(regions.items(), key=lambda kv: -kv[1]))
     lines = [
         f"# 自动更新: {now_bj('%Y-%m-%d %H:%M:%S')} (每小时重新检测)",
@@ -157,7 +176,7 @@ def build_header(source, nodes, total_alive):
 
 
 def build_clash_yaml(nodes):
-    """Clash proxies 列表。名字: 国家-类型-序号。证书全网通用: 取第一个带完整证书的节点, 用 YAML 锚点定义, 其余引用。"""
+    """Clash proxies 列表 (名字取 n["name"])。证书全网通用: 取第一个带完整证书的节点, 用 YAML 锚点定义, 其余引用。"""
     for n in nodes:
         ca, cert, key = (pem_block(n["config"], t) for t in ("ca", "cert", "key"))
         if ca and cert and key:
@@ -168,16 +187,11 @@ def build_clash_yaml(nodes):
     def indented(pem):
         return "\n".join("      " + ln for ln in pem.splitlines())
 
-    counters = {}
     out = ["proxies:"]
     for i, n in enumerate(nodes):
-        region = country_label(n["country_short"], n["country_long"])
-        group = (region, n["ip_type"])
-        counters[group] = counters.get(group, 0) + 1
-        name = node_name(region, n["ip_type"], counters[group])
         cfg = n["config"]
         out += [
-            f"  - name: {yaml_str(name)}",
+            f"  - name: {yaml_str(n['name'])}",
             "    type: openvpn",
             f"    server: {yaml_str(n['remote_host'])}",
             f"    port: {n['remote_port']}",
@@ -201,16 +215,18 @@ def build_clash_yaml(nodes):
 
 
 def build_json(nodes, checked):
-    countries = {}
+    regions = {}
     for n in nodes:
-        grp = countries.setdefault(n["country_short"], {"long": n["country_long"], "count": 0})
+        grp = regions.setdefault(n["region"], {"code": n["country_short"], "count": 0})
         grp["count"] += 1
     return {
         "updated_at": now_bj(),
         "total": len(nodes),
         "checked": checked,
-        "countries": countries,
+        "countries": regions,   # 以中文地区名为键 (GB / UK 已合并)
         "entries": [{
+            "name": n["name"],
+            "region": n["region"],
             "country_long": n["country_long"],
             "country_short": n["country_short"],
             "host": n["remote_host"],
@@ -240,35 +256,37 @@ def main():
     if not nodes:
         die("没有提取到任何 OpenVPN 节点, 拒绝提交空结果")
 
+    if INCLUDE_COUNTRIES:
+        before = len(nodes)
+        nodes = [n for n in nodes if (n["country_short"] or "").strip().upper() in INCLUDE_COUNTRIES]
+        log(f"国家白名单 {','.join(INCLUDE_COUNTRIES)}: {before} -> {len(nodes)}")
+        if not nodes:
+            die("国家白名单过滤后无可用节点 (本轮数据源无白名单国家)")
+
     log(f"== 3/4 TCP 可达检查 (超时 {TIMEOUT:g}s, 并发 {WORKERS}) ==")
     alive = check_nodes(nodes)
     log(f"保留 {len(alive)}/{len(nodes)}" + (" (含未检查的 UDP 节点)" if KEEP_UDP else ""))
     if not alive:
         die("检查后剩余 0 个可用节点, 拒绝提交空结果")
 
-    if INCLUDE_COUNTRIES:
-        before = len(alive)
-        alive = [n for n in alive
-                 if (n["country_short"] or "").strip().upper() in INCLUDE_COUNTRIES]
-        log(f"国家白名单 {','.join(INCLUDE_COUNTRIES)}: {before} -> {len(alive)}")
-        if not alive:
-            die("国家白名单过滤后无可用节点 (本轮数据源无白名单国家)")
-
     log("== 4/4 生成输出文件 ==")
+    alive = sort_nodes(alive)
+    assign_names(alive)   # 命名只做一次, 网页和订阅共用
+
     isp_n = sum(1 for n in alive if n["ip_type"] == "residential")
     dc_n = sum(1 for n in alive if n["ip_type"] == "datacenter")
-    yaml_nodes = list(alive)
+    yaml_nodes = alive
     if drop_datacenter(isp_n):
         yaml_nodes = [n for n in alive if n["ip_type"] != "datacenter"]
         log(f"家宽 {isp_n} 个, 机房 {dc_n} 个只在网页显示, 不写入 ovpn.yaml (写入 {len(yaml_nodes)} 个)")
     else:
         log(f"家宽 {isp_n} 个 (未超过阈值或未启用排除), 机房 {dc_n} 个一并写入")
-    if MAX_YAML > 0:
-        # 只截断订阅: 延迟优先 (UDP 无延迟排最后)
-        yaml_nodes.sort(key=lambda n: (n["latency_ms"] is None, n["latency_ms"] or 0))
-        yaml_nodes = yaml_nodes[:MAX_YAML]
+    if MAX_YAML > 0 and len(yaml_nodes) > MAX_YAML:
+        # 只截断订阅: 延迟优先 (UDP 无延迟排最后); 截断后仍保持 alive 的排序
+        keep = sorted(yaml_nodes, key=lambda n: (n["latency_ms"] is None, n["latency_ms"] or 0))[:MAX_YAML]
+        keep_ids = {id(n) for n in keep}
+        yaml_nodes = [n for n in alive if id(n) in keep_ids]
 
-    alive, yaml_nodes = sort_nodes(alive), sort_nodes(yaml_nodes)
     yaml_path = os.path.join(OUT_DIR, "ovpn.yaml")
     json_path = os.path.join(OUT_DIR, "ovpn.json")
     write_text(yaml_path, build_header(source, yaml_nodes, len(alive)) + build_clash_yaml(yaml_nodes))
