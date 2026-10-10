@@ -6,8 +6,12 @@ name: OpenVPN Refresh
 # 每次运行结束清理旧的运行记录, 只保留最新 3 条。
 on:
   schedule:
-    - cron: "16 * * * *"
+    - cron: "0 * * * *"
   workflow_dispatch:
+
+concurrency:
+  group: ovpn
+  cancel-in-progress: false
 
 permissions:
   contents: read
